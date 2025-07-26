@@ -22,7 +22,7 @@ import os
 # Initial configuration
 st.title("🔍 Annual GDP Prediction for 2024")
 cet = pytz.timezone('CET')
-current_date_time = cet.localize(datetime(2025, 7, 26, 23, 19))  # Updated to 11:19 PM CET
+current_date_time = cet.localize(datetime(2025, 7, 26, 23, 49))  # Updated to 11:49 PM CET
 st.write(f"**Current Date and Time:** {current_date_time.strftime('%d/%m/%Y %H:%M %Z')}")
 
 # Set random seed
@@ -35,19 +35,19 @@ error_log = []
 # Normalize string function
 def normalize_name(name):
     if pd.isna(name) or not isinstance(name, str):
-        error_log.append(f"Non-text or NaN value: {name}. Replaced with 'unknown'.")
-        return "unknown"
+        error_log.append(f"Valeur non textuelle ou NaN : {name}. Remplacement par 'inconnu'.")
+        return "inconnu"
     original_name = name
     name = unicodedata.normalize('NFKD', name).encode('ascii', 'ignore').decode('utf-8').strip()
     name = re.sub(r"['’´]+", "'", name)
     name = re.sub(r'\s+', ' ', name).lower()
     name = name.replace("d'autre produits", "d'autres produits")
     name = name.replace("de lhabillement", "de l'habillement")
-    name = name.replace("crise sociale", "social crisis")
+    name = name.replace("crise sociale", "Crise sociale")
     if name.startswith("impots nets de subventions") or name.startswith("impôts nets de subventions"):
-        name = "net taxes on products"
-        error_log.append(f"Normalized '{original_name}' to 'net taxes on products'.")
-    error_log.append(f"Normalization: '{original_name}' -> '{name}'")
+        name = "impots nets de subventions sur les produits"
+        error_log.append(f"Normalisé '{original_name}' en 'impots nets de subventions sur les produits'.")
+    error_log.append(f"Normalisation : '{original_name}' -> '{name}'")
     return name
 
 # Load and preprocess data
@@ -55,140 +55,136 @@ def normalize_name(name):
 def load_and_preprocess(uploaded_file=None):
     try:
         if uploaded_file:
-            # Reset file pointer and read raw content for debugging
             uploaded_file.seek(0)
             raw_content = uploaded_file.read().decode('utf-8')
             if not raw_content.strip():
-                error_log.append("The uploaded file is empty.")
+                error_log.append("Le fichier uploadé est vide.")
                 st.error("The uploaded file is empty. Please check the file.")
-                raise ValueError("Empty file.")
-            error_log.append(f"Raw content of uploaded file: {raw_content[:200]}...")
+                raise ValueError("Fichier vide.")
+            error_log.append(f"Contenu brut du fichier uploadé : {raw_content[:200]}...")
             
-            # Try reading with different separators
             for sep in [';', ',', '\t']:
                 try:
                     uploaded_file.seek(0)
                     df = pd.read_csv(uploaded_file, sep=sep, encoding='utf-8')
                     if not df.empty and 'année' in df.columns:
-                        error_log.append(f"File loaded with separator '{sep}'.")
+                        error_log.append(f"Fichier chargé avec séparateur '{sep}'.")
                         break
                 except Exception as e:
-                    error_log.append(f"Failed to read with separator '{sep}': {str(e)}")
+                    error_log.append(f"Échec de lecture avec séparateur '{sep}': {str(e)}")
             else:
-                error_log.append("Unable to read the file with tested separators (; , \\t).")
+                error_log.append("Impossible de lire le fichier avec les séparateurs testés (; , \\t).")
                 st.error("Unable to read the CSV file. Check the format and separator.")
-                raise ValueError("Invalid CSV format or incorrect separator.")
+                raise ValueError("Format CSV invalide ou séparateur incorrect.")
         else:
-            # Fallback to default file
             default_file = "VA-2015-2023P.csv"
             if not os.path.exists(default_file):
-                error_log.append(f"File '{default_file}' not found.")
+                error_log.append(f"Fichier '{default_file}' introuvable.")
                 st.error(f"File '{default_file}' not found. Check the file path.")
-                raise FileNotFoundError(f"File '{default_file}' not found.")
+                raise FileNotFoundError(f"Fichier '{default_file}' introuvable.")
             df = pd.read_csv(default_file, sep=';', encoding='utf-8')
-            error_log.append(f"File loaded as CSV with separator ';'.")
+            error_log.append(f"Fichier chargé comme CSV avec séparateur ';'.")
 
-        # Validate DataFrame
         if df.empty or len(df.columns) == 0:
-            error_log.append("The CSV file contains no valid columns.")
+            error_log.append("Le fichier CSV ne contient aucune colonne valide.")
             st.error("The CSV file contains no valid columns. Check the file content.")
-            raise ValueError("No columns in the CSV file.")
+            raise ValueError("Aucune colonne dans le fichier CSV.")
         if 'année' not in df.columns:
-            error_log.append(f"Column 'année' missing. Found columns: {df.columns.tolist()}")
+            error_log.append(f"Colonne 'année' absente. Colonnes trouvées : {df.columns.tolist()}")
             st.error(f"The 'année' column is required. Found columns: {df.columns.tolist()}")
-            raise ValueError("Column 'année' missing.")
+            raise ValueError("Colonne 'année' manquante.")
 
-        df = df.rename(columns={'année': 'Sector'})
-        error_log.append(f"Raw sectors in CSV: {df['Sector'].tolist()}")
-        df['Sector'] = df['Sector'].apply(normalize_name)
-        error_log.append(f"Sectors after normalization: {df['Sector'].tolist()}")
+        df = df.rename(columns={'année': 'Secteur'})
+        error_log.append(f"Secteurs bruts dans le CSV : {df['Secteur'].tolist()}")
+        df['Secteur'] = df['Secteur'].apply(normalize_name)
+        error_log.append(f"Secteurs après normalisation : {df['Secteur'].tolist()}")
 
         for col in df.columns[1:]:
             df[col] = df[col].astype(str).str.replace(' ', '').str.replace(',', '.')
             df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
 
         sectors = [
-            "agriculture, forestry and fishing",
-            "oil and natural gas extraction",
-            "mining products extraction",
-            "food and beverage industries",
-            "textile, clothing and leather industry",
-            "oil refining",
-            "chemical industries",
-            "other non-metallic mineral products industry",
-            "mechanical and electrical industries",
-            "various industries",
-            "electricity and gas production and distribution",
-            "water production and distribution and waste management",
+            "agriculture, sylviculture et peche",
+            "extraction petrole et gaz naturel",
+            "extraction des produits miniers",
+            "industries agro-alimentaires",
+            "industrie du textile, de l'habillement et du cuir",
+            "raffinage du petrole",
+            "industries chimiques",
+            "industrie d'autres produits mineraux non metalliques",
+            "industries mecaniques et electriques",
+            "industries diverses",
+            "production et distribution de l'electricite et gaz",
+            "production et distribution d'eau et gestion des dechets",
             "construction",
-            "trade and repair",
-            "transport and storage",
-            "accommodation and catering",
-            "information and communication",
-            "financial and insurance activities",
-            "public administration and defense",
-            "education",
-            "human health and social work",
-            "other market services",
-            "other household activities",
-            "activities of associative organizations"
+            "commerce et reparation",
+            "transport et entreposage",
+            "hebergement et restauration",
+            "information et communication",
+            "activites financieres et d'assurances",
+            "administration publique et defense",
+            "enseignement",
+            "sante humaine et action sociale",
+            "autres services marchands",
+            "autres activites des menages",
+            "activites des organisations associatives"
         ]
         macro_keywords = [
-            "unemployment rate", "inflation rate", "interest rate", "public debt", "tax pressure",
-            "international monetary policy", "regional geopolitical tensions", "commodity prices",
-            "drought and climate disaster", "pandemics", "social crisis",
-            "net taxes on products"
+            "taux de chomage", "taux d'inflation", "taux d'interet", "dette publique", "pression fiscale",
+            "politique monetaire internationale", "tensions geopolitiques regionales", "prix matieres premieres",
+            "secheresse et desastre climatique", "pandemies", "Crise sociale",
+            "impots nets de subventions sur les produits"
         ]
-        macro_rates = ["unemployment rate", "inflation rate", "interest rate", "public debt", "tax pressure"]
+        macro_rates = ["taux de chomage", "taux d'inflation", "taux d'interet", "dette publique", "pression fiscale"]
         events = [
-            "international monetary policy", "regional geopolitical tensions", "commodity prices",
-            "drought and climate disaster", "pandemics", "social crisis"
+            "politique monetaire internationale", "tensions geopolitiques regionales", "prix matieres premieres",
+            "secheresse et desastre climatique", "pandemies", "Crise sociale"
         ]
 
-        if 'f' in df['Sector'].values:
-            error_log.append("Row 'f' detected in sectors. It will be excluded.")
-            df = df[df['Sector'] != 'f']
+        if 'f' in df['Secteur'].values:
+            error_log.append("Ligne 'f' détectée dans les secteurs. Elle sera exclue.")
+            df = df[df['Secteur'] != 'f']
 
-        if not df['Sector'].str.contains("gross domestic product gdp", case=False).any():
-            st.error("No GDP data found. Available sectors: {}".format(df['Sector'].tolist()))
-            error_log.append("No GDP data found in the file.")
-            raise ValueError("GDP data missing.")
+        if not df['Secteur'].str.contains("produit interieur brut pib", case=False).any():
+            st.error(f"No GDP data found. Available sectors: {df['Secteur'].tolist()}")
+            error_log.append("Aucune donnée PIB trouvée dans le fichier.")
+            raise ValueError("Données PIB manquantes.")
 
-        taxes_key = "net taxes on products"
-        df_macro = df[df['Sector'].isin(macro_keywords)].copy()
-        df_pib = df[df['Sector'] == "gross domestic product gdp"].copy()
-        df_secteurs = df[df['Sector'].isin(sectors)].copy()
-        df_secteurs = df_secteurs[df_secteurs['Sector'] != taxes_key]
+        impots_key = "impots nets de subventions sur les produits"
+        df_macro = df[df['Secteur'].isin(macro_keywords)].copy()
+        df_pib = df[df['Secteur'] == "produit interieur brut pib"].copy()
+        df_secteurs = df[df['Secteur'].isin(sectors)].copy()
+        df_secteurs = df_secteurs[df_secteurs['Secteur'] != impots_key]
 
-        if taxes_key not in df_macro['Sector'].values:
-            error_log.append(f"Error: '{taxes_key}' not found in df_macro.")
-            st.error(f"Error: '{taxes_key}' not found in df_macro.")
-            raise ValueError(f"'{taxes_key}' missing in df_macro.")
-        if taxes_key in df_secteurs['Sector'].values:
-            error_log.append(f"Error: '{taxes_key}' found in df_secteurs after exclusion.")
-            st.error(f"Error: '{taxes_key}' found in df_secteurs after exclusion.")
-            raise ValueError(f"'{taxes_key}' found in df_secteurs after exclusion.")
+        if impots_key not in df_macro['Secteur'].values:
+            error_log.append(f"Erreur : '{impots_key}' non trouvé dans df_macro.")
+            st.error(f"Error: '{impots_key}' not found in macro data.")
+            raise ValueError(f"'{impots_key}' manquant dans df_macro.")
+        if impots_key in df_secteurs['Secteur'].values:
+            error_log.append(f"Erreur : '{impots_key}' trouvé dans df_secteurs après exclusion.")
+            st.error(f"Error: '{impots_key}' found in sector data after exclusion.")
+            raise ValueError(f"'{impots_key}' trouvé dans df_secteurs après exclusion.")
 
-        error_log.append(f"Sectors in df_secteurs: {df_secteurs['Sector'].tolist()}")
-        error_log.append(f"Macros in df_macro: {df_macro['Sector'].tolist()}")
+        error_log.append(f"Secteurs dans df_secteurs : {df_secteurs['Secteur'].tolist()}")
+        error_log.append(f"Macros dans df_macro : {df_macro['Secteur'].tolist()}")
 
         if df_pib.empty:
-            st.error("No GDP data found. Available sectors: {}".format(df['Sector'].tolist()))
-            error_log.append("No GDP data found in the file.")
-            raise ValueError("GDP data missing.")
+            st.error(f"No GDP data found. Available sectors: {df['Secteur'].tolist()}")
+            error_log.append("Aucune donnée PIB trouvée dans le fichier.")
+            raise ValueError("Données PIB manquantes.")
 
-        missing_sectors = [s for s in sectors if s not in df['Sector'].values]
-        missing_macro = [m for m in macro_keywords if m not in df['Sector'].values]
+        missing_sectors = [s for s in sectors if s not in df['Secteur'].values]
+        missing_macro = [m for m in macro_keywords if m not in df['Secteur'].values]
         if missing_sectors:
             st.warning(f"Missing sectors: {missing_sectors}. Using average of available sectors.")
-            error_log.append(f"Missing sectors: {missing_sectors}")
+            error_log.append(f"Secteurs manquants : {missing_sectors}")
         if missing_macro:
-            st.warning(f"Missing macros: {missing_macro}. Using default values (0).")
-            error_log.append(f"Missing macros: {missing_macro}")
+            st.warning(f"Missing macro variables: {missing_macro}. Using default values (0).")
+            error_log.append(f"Macros manquants : {missing_macro}")
 
-        df_macro.set_index("Sector", inplace=True)
-        df_pib.set_index("Sector", inplace=True)
-        df_secteurs.set_index("Sector", inplace=True)
+        df_macro.set_index("Secteur", inplace=True)
+        df_pib.set_index("Secteur", inplace=True)
+        df_secteurs.set_index("Secteur", inplace=True)
 
         df_macro_T = df_macro.transpose()
         df_secteurs_T = df_secteurs.transpose()
@@ -197,36 +193,36 @@ def load_and_preprocess(uploaded_file=None):
         X_df = pd.concat([df_secteurs_T, df_macro_T[macro_rates + events]], axis=1).dropna()
         y_df = df_pib_T.loc[X_df.index]
 
-        error_log.append(f"Columns in X_df after concatenation: {list(X_df.columns)}")
+        error_log.append(f"Colonnes dans X_df après concaténation : {list(X_df.columns)}")
 
         if y_df.empty:
-            st.error("y_df empty after alignment with X_df. X_df indices: {}. df_pib_T indices: {}".format(X_df.index.tolist(), df_pib_T.index.tolist()))
-            error_log.append("y_df empty after alignment.")
-            raise ValueError("GDP data empty after preprocessing.")
+            st.error(f"y_df empty after alignment with X_df. X_df indices: {X_df.index.tolist()}. df_pib_T indices: {df_pib_T.index.tolist()}")
+            error_log.append("y_df vide après alignement.")
+            raise ValueError("Données PIB vides après prétraitement.")
 
         key_sectors = [
-            "agriculture, forestry and fishing", "mechanical and electrical industries",
-            "accommodation and catering", "information and communication",
-            "financial and insurance activities"
+            "agriculture, sylviculture et peche", "industries mecaniques et electriques",
+            "hebergement et restauration", "information et communication",
+            "activites financieres et d'assurances"
         ]
         for sector in key_sectors:
             if sector in X_df.columns:
                 X_df[f"{sector}_lag1"] = X_df[sector].shift(1).fillna(X_df[sector].mean())
             else:
                 X_df[f"{sector}_lag1"] = X_df[sectors].mean(axis=1).shift(1).fillna(X_df[sectors].mean().mean()) if sectors else 0
-                error_log.append(f"Lagged feature '{sector}_lag1' added with average of sectors since '{sector}' is missing.")
+                error_log.append(f"Feature décalée '{sector}_lag1' ajoutée avec moyenne des secteurs car '{sector}' est absent.")
 
         for rate in macro_rates:
             if rate in X_df.columns:
                 X_df[f"{rate}_lag1"] = X_df[rate].shift(1).fillna(X_df[rate].mean())
             else:
                 X_df[f"{rate}_lag1"] = 0
-                error_log.append(f"Lagged feature '{rate}_lag1' added with value 0 since '{rate}' is missing.")
+                error_log.append(f"Feature décalée '{rate}_lag1' ajoutée avec valeur 0 car '{rate}' est absent.")
 
         X_df['gdp_lag1'] = y_df.shift(1).fillna(y_df.mean())
 
         expected_features = sectors + macro_rates + events + [f"{s}_lag1" for s in key_sectors] + [f"{r}_lag1" for r in macro_rates] + ['gdp_lag1']
-        error_log.append(f"Expected columns in X_df: {expected_features} (count: {len(expected_features)})")
+        error_log.append(f"Colonnes attendues dans X_df : {expected_features} (nombre: {len(expected_features)})")
 
         missing_cols = [col for col in expected_features if col not in X_df.columns]
         extra_cols = [col for col in X_df.columns if col not in expected_features]
@@ -235,26 +231,26 @@ def load_and_preprocess(uploaded_file=None):
             for col in missing_cols:
                 if col in sectors and existing_cols:
                     X_df[col] = X_df[existing_cols].mean(axis=1)
-                    error_log.append(f"Missing feature '{col}' added with average of available sectors.")
+                    error_log.append(f"Feature manquante '{col}' ajoutée avec la moyenne des secteurs disponibles.")
                 elif col.endswith('_lag1') and col.replace('_lag1', '') in X_df.columns:
                     X_df[col] = X_df[col.replace('_lag1', '')].shift(1).fillna(X_df[col.replace('_lag1', '')].mean())
-                    error_log.append(f"Missing feature '{col}' added with lag.")
+                    error_log.append(f"Feature manquante '{col}' ajoutée avec décalage.")
                 else:
                     X_df[col] = 0
-                    error_log.append(f"Missing feature '{col}' added with value 0.")
+                    error_log.append(f"Feature manquante '{col}' ajoutée avec valeur 0.")
         if extra_cols:
             st.warning(f"Extra columns in X_df: {extra_cols}")
-            error_log.append(f"Extra columns in X_df: {extra_cols}")
+            error_log.append(f"Colonnes supplémentaires dans X_df : {extra_cols}")
             X_df = X_df.drop(columns=extra_cols, errors='ignore')
 
-        error_log.append(f"Columns in X_df after adding missing features: {list(X_df.columns)}")
-        error_log.append(f"Number of columns in X_df: {X_df.shape[1]} (expected: {len(expected_features)})")
+        error_log.append(f"Colonnes dans X_df après ajout des features manquantes : {list(X_df.columns)}")
+        error_log.append(f"Nombre de colonnes dans X_df : {X_df.shape[1]} (attendu : {len(expected_features)})")
 
         scaler_X = StandardScaler()
         scaler_y = StandardScaler()
         X_df = X_df[expected_features]
         scaler_X.fit(X_df)
-        error_log.append(f"Scaler_X fitted on {scaler_X.n_features_in_} features")
+        error_log.append(f"Scaler_X ajusté sur {scaler_X.n_features_in_} features")
         X = scaler_X.transform(X_df)
         y = scaler_y.fit_transform(y_df.values.reshape(-1, 1)).flatten()
         years = X_df.index.astype(int)
@@ -262,7 +258,7 @@ def load_and_preprocess(uploaded_file=None):
         return X, y, years, X_df, scaler_X, scaler_y, sectors, macro_rates, events, max(years), y_df, expected_features, df
 
     except Exception as e:
-        error_log.append(f"Error loading file: {str(e)}")
+        error_log.append(f"Erreur lors du chargement du fichier : {str(e)}")
         st.error(f"Error loading file: {str(e)}")
         raise
 
@@ -279,7 +275,7 @@ if uploaded_file:
             year_columns = [col for col in df_preview.columns if col != 'année' and col.isdigit()]
             max_year = max([int(col) for col in year_columns]) if year_columns else 2023
             new_year = max_year + 1
-            new_row = pd.DataFrame({col: ['gross domestic product gdp' if col == 'année' else 0.0] for col in df_preview.columns})
+            new_row = pd.DataFrame({col: ['produit interieur brut pib' if col == 'année' else 0.0] for col in df_preview.columns})
             if str(new_year) not in df_preview.columns:
                 new_row[str(new_year)] = 0.0
             st.write(f"### Add Data for Year {new_year}")
@@ -299,7 +295,7 @@ if uploaded_file:
                     uploaded_file = f
                 uploaded_file.seek(0)
     except Exception as e:
-        error_log.append(f"Error reading uploaded file for preview: {str(e)}")
+        error_log.append(f"Erreur lors de la lecture du fichier uploadé pour l'aperçu : {str(e)}")
         st.error(f"Error reading uploaded file: {str(e)}")
         st.stop()
 
@@ -409,7 +405,6 @@ results = []
 models = {}
 test_maes = {}
 
-# Check if models need to be trained
 train_models = True
 if "last_input" in st.session_state and st.session_state.last_input == uploaded_file:
     if "trained_models" in st.session_state and "test_maes" in st.session_state:
@@ -419,13 +414,12 @@ if "last_input" in st.session_state and st.session_state.last_input == uploaded_
         train_models = False
         st.write("Using results from previously trained models.")
 
-# Train models if needed
 if train_models:
     for model, name in [(ridge_cv, "Ridge"), (elasticnet_cv, "ElasticNet"), (huber_cv, "Huber")]:
         with st.spinner(f"Training {name}..."):
             mae, r2, trained_model = evaluate_model(model, X, y, name)
             results.append({
-                'Model': name,
+                'Modèle': name,
                 'CV MAE': mae,
                 'Train R²': r2_score(scaler_y.inverse_transform(y.reshape(-1, 1)), scaler_y.inverse_transform(model.predict(X).reshape(-1, 1)))
             })
@@ -436,30 +430,27 @@ if train_models:
     st.session_state.results = results
     st.session_state.last_input = uploaded_file
 
-# Check if test_maes is empty
 if not test_maes:
     st.error("No models were trained. Please check the input data or reset the session.")
     st.stop()
 
-# Select best model
 best_model_name = min(test_maes, key=test_maes.get)
 best_model = models[best_model_name].best_estimator_
 st.markdown(f"### 🏆 Selected Model: **{best_model_name}**")
 st.write(f"The model **{best_model_name}** was chosen because it has the lowest MAE: {test_maes[best_model_name]:.2f}")
 
-# Verify selected model
 st.header("🔎 Verification of the Selected Model")
 st.markdown("#### 1. Data Integrity Check")
 if X_df.isna().any().any():
-    error_log.append("Missing values detected in X_df.")
+    error_log.append("Valeurs manquantes détectées dans X_df.")
     st.error("Missing values in input data. Replacing with 0.")
     X_df = X_df.fillna(0)
 if y_df.isna().any().any():
-    error_log.append("Missing values detected in y_df.")
+    error_log.append("Valeurs manquantes détectées dans y_df.")
     st.warning("Missing values in target data. Replacing with mean.")
     y_df = y_df.fillna(y_df.mean())
 if y_df.empty or y_df.shape[0] == 0:
-    error_log.append("y_df is empty or has no rows.")
+    error_log.append("y_df est vide ou n'a aucune ligne.")
     st.error("Target data (y_df) is empty. Stopping the program.")
     st.stop()
 st.success(f"No missing values in data after preprocessing. y_df shape: {y_df.shape}")
@@ -477,7 +468,7 @@ test_r2 = r2_score(y_test_unscaled, y_pred_test_unscaled)
 st.write(f"Test Set MAE: {test_mae:.2f}")
 st.write(f"Test Set R²: {test_r2:.4f}")
 if test_mae > 1.5 * test_maes[best_model_name]:
-    error_log.append(f"Test set MAE ({test_mae:.2f}) significantly higher than CV MAE ({test_maes[best_model_name]:.2f}).")
+    error_log.append(f"MAE sur l'ensemble de test ({test_mae:.2f}) significativement plus élevé que le MAE CV ({test_maes[best_model_name]:.2f}).")
     st.warning("Test set performance worse than expected.")
 
 st.markdown("#### 3. Residual Analysis")
@@ -487,7 +478,7 @@ fig_residuals = px.scatter(x=years[train_size:], y=residuals, title="Residuals o
 fig_residuals.add_hline(y=0, line_dash="dash", line_color="black")
 st.plotly_chart(fig_residuals)
 if np.abs(residuals).mean() > test_maes[best_model_name]:
-    error_log.append(f"Average residuals ({np.abs(residuals).mean():.2f}) are high compared to CV MAE ({test_maes[best_model_name]:.2f}).")
+    error_log.append(f"Les résidus moyens ({np.abs(residuals).mean():.2f}) sont élevés par rapport au MAE CV ({test_maes[best_model_name]:.2f}).")
     st.warning("Residuals show high average error, indicating potential underperformance.")
 
 st.markdown("#### 4. Prediction Intervals")
@@ -524,35 +515,35 @@ if st.button("🔮 Predict GDP for 2024"):
                 growth_rates[col] = year_growth.mean() * 100 if not year_growth.empty else 0.0
             else:
                 growth_rates[col] = 0.0
-                error_log.append(f"Growth rate for '{col}' not calculated (column missing). Using 0.")
+                error_log.append(f"Taux de croissance pour '{col}' non calculé (colonne absente). Utilisation de 0.")
         
         for event in events:
             if event in recent_data.columns:
                 growth_rates[event] = recent_data[event].mean() if not recent_data[event].empty else 0
             else:
                 growth_rates[event] = 0
-                error_log.append(f"Value for '{event}' not found. Using 0.")
+                error_log.append(f"Valeur pour '{event}' non trouvée. Utilisation de 0.")
 
         for sector in sectors:
             try:
                 if sector not in X_df.columns:
-                    error_log.append(f"Error for {sector} ({target_year}): not found in X_df. Using 0.")
+                    error_log.append(f"Erreur pour {sector} ({target_year}): non trouvé dans X_df. Utilisation de 0.")
                     feature_vector[sector] = 0.0
                 else:
                     feature_vector[sector] = base_year_data[sector] * (1 + growth_rates[sector] / 100)
             except Exception as e:
-                error_log.append(f"Error for {sector} ({target_year}): {str(e)}. Using 0.")
+                error_log.append(f"Erreur pour {sector} ({target_year}): {str(e)}. Utilisation de 0.")
                 feature_vector[sector] = 0.0
 
         for rate in macro_rates:
             try:
                 if rate not in X_df.columns:
-                    error_log.append(f"Error for {rate} ({target_year}): not found in X_df. Using 0.")
+                    error_log.append(f"Erreur pour {rate} ({target_year}): non trouvé dans X_df. Utilisation de 0.")
                     feature_vector[rate] = 0.0
                 else:
                     feature_vector[rate] = base_year_data[rate] * (1 + growth_rates[rate] / 100)
             except Exception as e:
-                error_log.append(f"Error for {rate} ({target_year}): {str(e)}. Using 0.")
+                error_log.append(f"Erreur pour {rate} ({target_year}): {str(e)}. Utilisation de 0.")
                 feature_vector[rate] = 0.0
 
         for event in events:
@@ -560,10 +551,10 @@ if st.button("🔮 Predict GDP for 2024"):
                 if event in X_df.columns:
                     feature_vector[event] = growth_rates[event]
                 else:
-                    error_log.append(f"Error for {event} ({target_year}): not found in X_df. Using 0.")
+                    error_log.append(f"Erreur pour {event} ({target_year}): non trouvé dans X_df. Utilisation de 0.")
                     feature_vector[event] = 0
             except Exception as e:
-                error_log.append(f"Error for {event} ({target_year}): {str(e)}. Using 0.")
+                error_log.append(f"Erreur pour {event} ({target_year}): {str(e)}. Utilisation de 0.")
                 feature_vector[event] = 0
 
         for col in expected_features:
@@ -575,18 +566,18 @@ if st.button("🔮 Predict GDP for 2024"):
                     else:
                         feature_vector[col] = base_year_data.get(col, X_df[col].mean() if col in X_df.columns else 0.0)
                     if feature_vector[col].iloc[0] == 0.0:
-                        error_log.append(f"Lagged feature '{col}' for {target_year} set to 0 (missing data).")
+                        error_log.append(f"Feature décalée '{col}' pour {target_year} définie à 0 (données manquantes).")
                 else:
                     feature_vector[col] = base_year_data.get(col, X_df[col].mean() if col in X_df.columns else 0.0)
                     if feature_vector[col].iloc[0] == 0.0:
-                        error_log.append(f"Feature '{col}' for {target_year} set to 0 (missing data).")
+                        error_log.append(f"Feature '{col}' pour {target_year} définie à 0 (données manquantes).")
 
         if feature_vector.isna().any().any():
-            error_log.append(f"NaN values for {target_year}: {feature_vector.columns[feature_vector.isna().any()].tolist()}. Replacing with 0.")
+            error_log.append(f"Valeurs NaN pour {target_year} : {feature_vector.columns[feature_vector.isna().any()].tolist()}. Remplacement par 0.")
             feature_vector = feature_vector.fillna(0.0)
 
         feature_vector = feature_vector[expected_features]
-        error_log.append(f"Feature vector for {target_year}: {list(feature_vector.columns)} (count: {len(feature_vector.columns)})")
+        error_log.append(f"Feature vector pour {target_year} : {list(feature_vector.columns)} (nombre: {len(feature_vector.columns)})")
         X_new = scaler_X.transform(feature_vector)
 
         predicted_gdp = float(scaler_y.inverse_transform(best_model.predict(X_new).reshape(-1, 1))[0])
@@ -606,9 +597,9 @@ if st.button("🔮 Predict GDP for 2024"):
 
         best_model.fit(X, y)
         feature_vector_for_shap = X_new
-        error_log.append(f"Shape of feature_vector_for_shap: {feature_vector_for_shap.shape}")
+        error_log.append(f"Shape de feature_vector_for_shap : {feature_vector_for_shap.shape}")
         background_data = scaler_X.transform(X_df[expected_features])
-        error_log.append(f"Shape of background_data: {background_data.shape}")
+        error_log.append(f"Shape de background_data : {background_data.shape}")
 
         try:
             if best_model_name in ["Ridge", "ElasticNet"]:
@@ -625,7 +616,7 @@ if st.button("🔮 Predict GDP for 2024"):
                 )
 
             shap_values = explainer.shap_values(feature_vector_for_shap)
-            error_log.append(f"Shape of shap_values: {np.array(shap_values).shape}")
+            error_log.append(f"Shape de shap_values : {np.array(shap_values).shape}")
 
             st.markdown("#### 📊 Global Feature Importance (Summary Plot)")
             plt.figure(figsize=(10, 6))
@@ -659,7 +650,7 @@ if st.button("🔮 Predict GDP for 2024"):
             plt.close()
 
         except Exception as e:
-            error_log.append(f"Error computing SHAP: {str(e)}")
+            error_log.append(f"Erreur lors du calcul SHAP : {str(e)}")
             st.error(f"Unable to generate SHAP explanations: {str(e)}. Please check the data.")
 
         st.markdown("#### 📈 Historical vs Predicted GDP")
